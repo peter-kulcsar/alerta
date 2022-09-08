@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import current_app, g, jsonify, request
 from flask_cors import cross_origin
+from werkzeug.datastructures import MultiDict
 
 from alerta.app import qb
 from alerta.auth.decorators import permission
@@ -303,7 +304,7 @@ def delete_alert(alert_id):
 @jsonp
 def search_alerts():
     query_time = datetime.utcnow()
-    query = qb.alerts.from_params(request.args, customers=g.customers, query_time=query_time)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers, query_time=query_time)
     show_raw_data = request.args.get('show-raw-data', default=False, type=lambda x: x.lower() in ['true', 't', '1', 'yes', 'y', 'on'])
     show_history = request.args.get('show-history', default=False, type=lambda x: x.lower() in ['true', 't', '1', 'yes', 'y', 'on'])
     severity_count = Alert.get_counts_by_severity(query)
@@ -351,7 +352,7 @@ def search_alerts():
 @timer(gets_timer)
 @jsonp
 def history():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     paging = Page.from_params(request.args, items=0)
     history = Alert.get_history(query, paging.page, paging.page_size)
 
@@ -378,7 +379,7 @@ def history():
 @timer(count_timer)
 @jsonp
 def get_counts():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     severity_count = Alert.get_counts_by_severity(query)
     status_count = Alert.get_counts_by_status(query)
 
@@ -399,7 +400,7 @@ def get_counts():
 @timer(count_timer)
 @jsonp
 def get_topn_count():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     paging = Page.from_params(request.args, 1)
     topn = Alert.get_topn_count(query, topn=paging.page_size)
 
@@ -426,7 +427,7 @@ def get_topn_count():
 @timer(count_timer)
 @jsonp
 def get_topn_flapping():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     paging = Page.from_params(request.args, 1)
     topn = Alert.get_topn_flapping(query, topn=paging.page_size)
 
@@ -453,7 +454,7 @@ def get_topn_flapping():
 @timer(count_timer)
 @jsonp
 def get_topn_standing():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     paging = Page.from_params(request.args, 1)
     topn = Alert.get_topn_standing(query, topn=paging.page_size)
 
@@ -479,7 +480,7 @@ def get_topn_standing():
 @timer(gets_timer)
 @jsonp
 def get_environments():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     environments = Alert.get_environments(query)
 
     if environments:
@@ -504,7 +505,7 @@ def get_environments():
 @timer(gets_timer)
 @jsonp
 def get_services():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     services = Alert.get_services(query)
 
     if services:
@@ -529,7 +530,7 @@ def get_services():
 @timer(gets_timer)
 @jsonp
 def get_groups():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     groups = Alert.get_groups(query)
 
     if groups:
@@ -554,7 +555,7 @@ def get_groups():
 @timer(gets_timer)
 @jsonp
 def get_tags():
-    query = qb.alerts.from_params(request.args, customers=g.customers)
+    query = qb.alerts.from_params(add_user_filter(request.args), customers=g.customers)
     tags = Alert.get_tags(query)
 
     if tags:
@@ -701,3 +702,16 @@ def delete_note(alert_id, note_id):
         return jsonify(status='ok')
     else:
         raise ApiError('failed to delete note', 500)
+
+
+def add_user_filter(request_args: "MultiDict[str, str]") -> "MultiDict[str, str]":
+    # noinspection SpellCheckingInspection
+    user_filter_mapping = {
+        'alerta_user_a@rubin.hu': (('event', '~PIRA:'),),
+        'alerta_user_b@rubin.hu': (('event', '~RACC:'),),
+    }
+    if g.login in user_filter_mapping:
+        args_copy = request_args.copy()
+        args_copy.update(user_filter_mapping[g.login])
+        return args_copy
+    return request_args
