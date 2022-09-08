@@ -1,8 +1,10 @@
 version: '3.1'
 
 services:
-  api:
-    image: ghcr.io/alerta/alerta-api
+  web:
+    image: alerta/alerta-apnm-web:8.7.0
+    build:
+      context: .
     ports:
       - 8080:8080
     depends_on:
